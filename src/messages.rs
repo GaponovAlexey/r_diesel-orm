@@ -19,12 +19,3 @@ pub struct CreateArticle {
   pub content: String,
   pub created_by: i32,
 }
-
-
-
-#[derive(Message)]
-#[rtype(result = "QueryResult<Vec<User>>")]
-pub struct CreateUser {
-    pub name: String,
-    pub email: String,
-}

@@ -16,7 +16,6 @@ pub struct CreateArticleBody {
 
 #[get("/users")]
 pub async fn fetch_users(state: Data<AppState>) -> impl Responder {
-    // "GET /users".to_string()
     let db: Addr<DbActor> = state.as_ref().db.clone();
 
     match db.send(FetchUser).await {
@@ -29,7 +28,6 @@ pub async fn fetch_users(state: Data<AppState>) -> impl Responder {
 #[get("/users/{id}/articles")]
 pub async fn fetch_user_articles(state: Data<AppState>, path: Path<i32>) -> impl Responder {
     let id: i32 = path.into_inner();
-    // format!("GET /users/{id}/articles")
 
     let db: Addr<DbActor> = state.as_ref().db.clone();
 
@@ -47,7 +45,6 @@ pub async fn create_user_article(
     body: Json<CreateArticleBody>
 ) -> impl Responder {
     let id: i32 = path.into_inner();
-    // format!("POST /users/{id}/articles")
 
     let db: Addr<DbActor> = state.as_ref().db.clone();
 
