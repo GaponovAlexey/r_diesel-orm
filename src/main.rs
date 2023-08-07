@@ -1,12 +1,23 @@
-use actix_web::{ get, web, App, HttpServer, Responder };
+use actix_web::{ web::Data, App, HttpServer };
+use actix::SyncArbiter;
 
 use serde::{ Deserialize, Serialize };
-mod services;
-use std::sync::Mutex;
 
-struct AppState {
-    todo_list_entries: Mutex<Vec<TodoListEntry>>,
-}
+// use diesel::{ r2d2::{ ConnectionManager, Pool }, PgConnection };
+
+use dotenv::dotenv;
+use std::env;
+
+// mod import 
+mod services;
+mod db_utils;
+mod messages;
+mod actors;
+mod db_models;
+mod schema;
+mod insertables;
+
+
 #[derive(Serialize, Deserialize, Clone)]
 struct TodoListEntry {
     id: i32,
@@ -14,18 +25,24 @@ struct TodoListEntry {
     title: String,
 }
 
-#[get("/")]
-async fn my_index() -> String {
-    "say hi".to_string()
-}
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    let app_data = web::Data::new(AppState {
-        todo_list_entries: Mutex::new(vec![]),
-    });
+    dotenv().ok();
+   
+    let db_url: String = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+   
+    let pool = db_utils::get_pool(&db_url);
+   
+    let db_addr = SyncArbiter::start(5, move || db_utils::DbActor(pool.clone()));
 
     HttpServer::new(move || {
-        App::new().app_data(app_data.clone()).configure(services::config).service(my_index)
+        App::new()
+            .app_data(
+                Data::new(db_utils::AppState {
+                    db: db_addr.clone(),
+                })
+            )
+            .configure(services::config)
     })
         .bind(("127.0.0.1", 3000))?
         .run().await

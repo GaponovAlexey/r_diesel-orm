@@ -1,21 +1,12 @@
-use actix_web::{ get, post, put, web, delete, Responder, HttpResponse };
 use serde::Deserialize;
-use crate::{ AppState, TodoListEntry };
-#[get("/todolist/entries")]
-async fn get_entries(data: web::Data<AppState>) -> impl Responder {
-    HttpResponse::Ok().json(data.todo_list_entries.lock().expect("err entries").to_vec())
-}
+use actix_web::{ get, post, web::{ Data, Json, Path, ServiceConfig }, Responder, HttpResponse };
 
-#[derive(Deserialize, Clone)]
-pub struct CreateEntryData {
-    pub title: String,
-    pub date: i64,
-}
+use actix::Addr;
 
-#[derive(Deserialize, Clone)]
-pub struct UpdateEntryData {
-    pub title: String,
-}
+use crate::{
+    messages::{ FetchUser, FetchUserArticles, CreateArticle },
+    db_utils::{ DbActor, AppState },
+};
 
 #[derive(Deserialize)]
 pub struct CreateArticleBody {
@@ -23,60 +14,55 @@ pub struct CreateArticleBody {
     pub content: String,
 }
 
-#[post("/todolist/entries")]
-async fn create_entry(
-    data: web::Data<AppState>,
-    param_obj: web::Json<CreateEntryData>
-) -> impl Responder {
-    let mut todo_list_entries = data.todo_list_entries.lock().expect("err post");
-    let mut max_id = 0;
+#[get("/users")]
+pub async fn fetch_users(state: Data<AppState>) -> impl Responder {
+    // "GET /users".to_string()
+    let db: Addr<DbActor> = state.as_ref().db.clone();
 
-    for i in 0..todo_list_entries.len() {
-        if todo_list_entries[i].id > max_id {
-            max_id = todo_list_entries[i].id;
-        }
+    match db.send(FetchUser).await {
+        Ok(Ok(info)) => HttpResponse::Ok().json(info),
+        Ok(Err(_)) => HttpResponse::NotFound().json("No users found"),
+        _ => HttpResponse::InternalServerError().json("Unable to retrieve users"),
     }
-
-    todo_list_entries.push(TodoListEntry {
-        id: max_id + 1,
-        title: param_obj.title.clone(),
-        date: param_obj.date,
-    });
-
-    HttpResponse::Ok().json(todo_list_entries.to_vec())
 }
 
-#[put("todolist/entries/{id}")]
-async fn update_entry(
-    data: web::Data<AppState>,
-    path: web::Path<i32>,
-    param_obj: web::Json<UpdateEntryData>
-) -> impl Responder {
-    let id = path.into_inner();
-    let mut todo_list_entries = data.todo_list_entries.lock().expect("err");
-    for i in 0..todo_list_entries.len() {
-        if todo_list_entries[i].id == id {
-            todo_list_entries[i].title = param_obj.title.clone();
-            break;
-        }
+#[get("/users/{id}/articles")]
+pub async fn fetch_user_articles(state: Data<AppState>, path: Path<i32>) -> impl Responder {
+    let id: i32 = path.into_inner();
+    // format!("GET /users/{id}/articles")
+
+    let db: Addr<DbActor> = state.as_ref().db.clone();
+
+    match db.send(FetchUserArticles { user_id: id }).await {
+        Ok(Ok(info)) => HttpResponse::Ok().json(info),
+        Ok(Err(_)) => HttpResponse::NotFound().json(format!("No articles for user {id}")),
+        _ => HttpResponse::InternalServerError().json("Unable to retrieve user articles"),
     }
-
-    HttpResponse::Ok().json(todo_list_entries.to_vec())
-}
-#[delete("todolist/entries/{id}")]
-async fn delete_entry(data: web::Data<AppState>, path: web::Path<i32>) -> impl Responder {
-    let mut todo_list_entries = data.todo_list_entries.lock().expect("err");
-
-    let id = path.into_inner();
-    *todo_list_entries = todo_list_entries
-        .to_vec()
-        .into_iter()
-        .filter(|x| x.id != id)
-        .collect();
-
-    HttpResponse::Ok().json(todo_list_entries.to_vec())
 }
 
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(get_entries).service(create_entry).service(update_entry).service(delete_entry);
+#[post("/users/{id}/articles")]
+pub async fn create_user_article(
+    state: Data<AppState>,
+    path: Path<i32>,
+    body: Json<CreateArticleBody>
+) -> impl Responder {
+    let id: i32 = path.into_inner();
+    // format!("POST /users/{id}/articles")
+
+    let db: Addr<DbActor> = state.as_ref().db.clone();
+
+    match
+        db.send(CreateArticle {
+            title: body.title.to_string(),
+            content: body.content.to_string(),
+            created_by: id,
+        }).await
+    {
+        Ok(Ok(info)) => HttpResponse::Ok().json(info),
+        _ => HttpResponse::InternalServerError().json("Failed to create article"),
+    }
+}
+
+pub fn config(cfg: &mut ServiceConfig) {
+    cfg.service(fetch_users).service(fetch_user_articles).service(create_user_article);
 }

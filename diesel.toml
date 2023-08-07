@@ -1,0 +1,9 @@
+# For documentation on how to configure this file,
+# see https://diesel.rs/guides/configuring-diesel-cli
+
+[print_schema]
+file = "src/schema.rs"
+filter = { except_tables = [
+  "schema_migrations", "spree_option_types_prototypes",
+  "spree_option_values_variants", "spree_orders_promotions", "spree_products_promotion_rules", "spree_promotion_rules_users", "spree_properties_prototypes", "spree_roles_users", "spree_shipping_methods_zones"
+]}
